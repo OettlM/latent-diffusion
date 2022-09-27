@@ -39,7 +39,7 @@ model:
         ddconfig:
           double_z: false
           z_channels: 3
-          resolution: 256
+          resolution: 128
           in_channels: 3
           out_ch: 3
           ch: 128
@@ -56,23 +56,19 @@ model:
       target: ldm.modules.encoders.modules.SpatialRescaler
       params:
         n_stages: 2
-        in_channels: 182
+        in_channels: 1
         out_channels: 3
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 8
+    batch_size: 1
     wrap: false
-    num_workers: 10
+    num_workers: 8
     train:
-      target: ldm.data.landscapes.RFWTrain
+      target: ldm.data.her2.HER2Dataset
       params:
-        size: 768
-        crop_size: 512
-        segmentation_to_float32: true
+        folder: D:/HER2/data/patched/train
     validation:
-      target: ldm.data.landscapes.RFWValidation
+      target: ldm.data.her2.HER2Dataset
       params:
-        size: 768
-        crop_size: 512
-        segmentation_to_float32: true
+        folder: D:/HER2/data/patched/val
