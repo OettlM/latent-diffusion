@@ -17,6 +17,7 @@ from functools import partial
 from tqdm import tqdm
 from torchvision.utils import make_grid
 from pytorch_lightning.utilities.distributed import rank_zero_only
+from PIL import Image
 
 from ldm.util import log_txt_as_img, exists, default, ismap, isimage, mean_flat, count_params, instantiate_from_config
 from ldm.modules.ema import LitEma
@@ -1107,7 +1108,7 @@ class LatentDiffusion(DDPM):
             return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise
 
     @torch.no_grad()
-    def progressive_denoising(self, cond, shape, verbose=True, callback=None, quantize_denoised=False,
+    def progressive_denoising(self, cond, shape, verbose=False, callback=None, quantize_denoised=False,
                               img_callback=None, mask=None, x0=None, temperature=1., noise_dropout=0.,
                               score_corrector=None, corrector_kwargs=None, batch_size=None, x_T=None, start_T=None,
                               log_every_t=None):
@@ -1164,7 +1165,7 @@ class LatentDiffusion(DDPM):
 
     @torch.no_grad()
     def p_sample_loop(self, cond, shape, return_intermediates=False,
-                      x_T=None, verbose=True, callback=None, timesteps=None, quantize_denoised=False,
+                      x_T=None, verbose=False, callback=None, timesteps=None, quantize_denoised=False,
                       mask=None, x0=None, img_callback=None, start_T=None,
                       log_every_t=None):
 
@@ -1215,7 +1216,7 @@ class LatentDiffusion(DDPM):
 
     @torch.no_grad()
     def sample(self, cond, batch_size=16, return_intermediates=False, x_T=None,
-               verbose=True, timesteps=None, quantize_denoised=False,
+               verbose=False, timesteps=None, quantize_denoised=False,
                mask=None, x0=None, shape=None,**kwargs):
         if shape is None:
             shape = (batch_size, self.channels, self.image_size, self.image_size)
@@ -1248,9 +1249,9 @@ class LatentDiffusion(DDPM):
 
 
     @torch.no_grad()
-    def log_images(self, batch, N=8, n_row=4, sample=True, ddim_steps=200, ddim_eta=1., return_keys=None,
-                   quantize_denoised=True, inpaint=True, plot_denoise_rows=False, plot_progressive_rows=True,
-                   plot_diffusion_rows=True, **kwargs):
+    def log_images(self, batch, N=2, n_row=2, sample=True, ddim_steps=200, ddim_eta=1., return_keys=None,
+                   quantize_denoised=True, inpaint=False, plot_denoise_rows=False, plot_progressive_rows=False,
+                   plot_diffusion_rows=False, **kwargs):
 
         use_ddim = ddim_steps is not None
 
@@ -1390,6 +1391,57 @@ class LatentDiffusion(DDPM):
         x = nn.functional.conv2d(x, weight=self.colorize)
         x = 2. * (x - x.min()) / (x.max() - x.min()) - 1.
         return x
+
+
+    def test_step(self, batch, batch_idx):
+        if not self.inpaint:
+            z, c = self.get_input(batch, self.first_stage_key, force_c_encode=True)
+            samples, _ = self.sample_log(cond=c,batch_size=z.shape[0],ddim=True,ddim_steps=200,eta=1.0)
+            out = self.decode_first_stage(samples)
+
+            for i in range(len(out)):
+                for j in range(5):
+                    out_img = torch.clamp(out[i], -1., 1.)
+                    out_img = (out_img + 1.0) / 2.0
+
+                    img = out_img.permute(1,2,0).cpu().numpy()
+                    img = (img * 255).astype(np.uint8)
+
+                    # also add "blue-variance" condition
+                    if np.mean(img) >= 250 and not (max(np.std(img[:,:,0]), np.std(img[:,:,1])) > 2*np.std(img[:,:,2])):
+                        print(f"try: {j}, mean: {np.mean(img)}")
+                        tmp_inp = {'image':batch['image'][None,i], 'segmentation':batch['segmentation'][None,i], 'label':batch['label'][None,i]}
+        
+                        z, c = self.get_input(tmp_inp, self.first_stage_key, force_c_encode=True)
+                        samples, _ = self.sample_log(cond=c,batch_size=z.shape[0],ddim=True,ddim_steps=200,eta=1.0, quantize_denoised=bool((j+1)%2))
+                        out_new = self.decode_first_stage(samples)
+                        
+                        out[i] = out_new[0]
+                    else:
+                        break
+        else:
+            z, c = self.get_input(batch, self.first_stage_key, force_c_encode=True)
+
+            if c.shape[1] == 2:
+                # we are in Tumor mode
+                mask = ~(c[:,1]>0)
+            else:
+                mask = (c[:,0]!=0)
+
+            mask = mask[:,None].to(torch.uint8)
+            with self.ema_scope("Plotting Inpaint"):
+                samples, _ = self.sample_log(cond=c,batch_size=z.shape[0],ddim=True, eta=1.0,ddim_steps=200, x0=z, mask=mask)
+            out = self.decode_first_stage(samples)
+
+        out_imgs = torch.clamp(out, -1., 1.)
+        out_imgs = (out_imgs + 1.0) / 2.0
+
+        for i in range(len(out_imgs)):
+            img = out_imgs[i].permute(1,2,0).cpu().numpy()
+            img = (img * 255).astype(np.uint8)
+            c_img = batch['index'][i].cpu().numpy()
+
+            Image.fromarray(img).save(self.out_folder+f"/{str(c_img).zfill(4)}.png")
 
 
 class DiffusionWrapper(pl.LightningModule):

@@ -1,6 +1,7 @@
 import argparse, os, sys, datetime, glob, importlib, csv
 import numpy as np
 import time
+import wandb
 import torch
 import torchvision
 import pytorch_lightning as pl
@@ -287,7 +288,7 @@ class SetupCallback(Callback):
 
 
 class ImageLogger(Callback):
-    def __init__(self, batch_frequency, max_images, clamp=True, increase_log_steps=True,
+    def __init__(self, batch_frequency, max_images, clamp=True, increase_log_steps=False,
                  rescale=True, disabled=False, log_on_batch_idx=False, log_first_step=False,
                  log_images_kwargs=None):
         super().__init__()
@@ -312,10 +313,13 @@ class ImageLogger(Callback):
             grid = torchvision.utils.make_grid(images[k])
             grid = (grid + 1.0) / 2.0  # -1,1 -> 0,1; c,h,w
 
-            tag = f"{split}/{k}"
-            pl_module.logger.experiment.add_image(
-                tag, grid,
-                global_step=pl_module.global_step)
+            #tag = f"{split}/{k}"
+            #img = wandb.Image(grid, caption=k)
+            #pl_module.logger.experiment.log({tag:img}, step=pl_module.global_step)
+
+            #pl_module.logger.experiment.add_image(
+            #    tag, grid,
+            #    global_step=pl_module.global_step)
 
     @rank_zero_only
     def log_local(self, save_dir, split, images,
@@ -507,7 +511,7 @@ if __name__ == "__main__":
 
     ckptdir = os.path.join(logdir, "checkpoints")
     cfgdir = os.path.join(logdir, "configs")
-    seed_everything(opt.seed)
+    #seed_everything(opt.seed)
 
     try:
         # init and save configs
@@ -571,7 +575,7 @@ if __name__ == "__main__":
             "params": {
                 "dirpath": ckptdir,
                 "filename": "{epoch:06}",
-                "verbose": True,
+                "verbose": False,
                 "save_last": True,
             }
         }
@@ -606,8 +610,8 @@ if __name__ == "__main__":
             "image_logger": {
                 "target": "main.ImageLogger",
                 "params": {
-                    "batch_frequency": 750,
-                    "max_images": 4,
+                    "batch_frequency": 2500,
+                    "max_images": 2,
                     "clamp": True
                 }
             },
@@ -618,9 +622,9 @@ if __name__ == "__main__":
                     # "log_momentum": True
                 }
             },
-            "cuda_callback": {
-                "target": "main.CUDACallback"
-            },
+            #"cuda_callback": {
+            #    "target": "main.CUDACallback"
+            #},
         }
         if version.parse(pl.__version__) >= version.parse('1.4.0'):
             default_callbacks_cfg.update({'checkpoint_callback': modelckpt_cfg})
@@ -639,7 +643,7 @@ if __name__ == "__main__":
                      'params': {
                          "dirpath": os.path.join(ckptdir, 'trainstep_checkpoints'),
                          "filename": "{epoch:06}-{step:09}",
-                         "verbose": True,
+                         "verbose": False,
                          'save_top_k': -1,
                          'every_n_train_steps': 10000,
                          'save_weights_only': True
@@ -673,7 +677,7 @@ if __name__ == "__main__":
         # configure learning rate
         bs, base_lr = config.data.params.batch_size, config.model.base_learning_rate
         if not cpu:
-            ngpu = 1#len(lightning_config.trainer.gpus.strip(",").split(','))
+            ngpu = lightning_config.trainer.gpus
         else:
             ngpu = 1
         if 'accumulate_grad_batches' in lightning_config.trainer:

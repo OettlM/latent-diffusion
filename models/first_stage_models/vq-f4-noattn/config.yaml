@@ -10,10 +10,10 @@ model:
       attn_type: none
       double_z: false
       z_channels: 3
-      resolution: 256
+      resolution: 512
       in_channels: 3
       out_ch: 3
-      ch: 128
+      ch: 32
       ch_mult:
       - 1
       - 2
@@ -33,14 +33,23 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 8
-    num_workers: 12
-    wrap: true
+    batch_size: 1
+    wrap: false
+    num_workers: 8
     train:
-      target: ldm.data.openimages.FullOpenImagesTrain
+      target: ldm.data.her2.HER2Dataset
       params:
-        crop_size: 256
+        folder: D:/HER2/data/patched/train_no_b
+        cluster: False
     validation:
-      target: ldm.data.openimages.FullOpenImagesValidation
+      target: ldm.data.her2.HER2Dataset
       params:
-        crop_size: 256
+        folder: D:/HER2/data/patched/val_no_b
+        cluster: False
+
+lightning:
+  trainer:
+    log_every_n_steps: 50
+    progress_bar_refresh_rate: 50
+    gpus: 1
+    accelerator: gpu

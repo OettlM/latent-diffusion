@@ -12,18 +12,58 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Train",
+            "name": "Train_AE",
             "type": "python",
             "request": "launch",
             "program": "main.py",
             "console": "integratedTerminal",
             "args": [
-                "--base=models/ldm/semantic_synthesis512/config.yaml",
+                "--base=confs/ae_pc.yaml",
                 "--train",
-                "--gpus=1",
                 "--accelerator=gpu"
                     ],
             "justMyCode": false
-        }
+        },
+        {
+            "name": "Train_Diff",
+            "type": "python",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--base=confs/diff_her2_pc_vq.yaml",
+                "--train",
+                "--accelerator=gpu"
+                    ],
+            "justMyCode": false
+        },
+        {
+            "name": "Predict",
+            "type": "python",
+            "request": "launch",
+            "program": "predict.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--base=confs/predict_her2_pc.yaml",
+                "--accelerator=gpu",
+                "--out_folder=D:/HER2/data/patched_her2/train/inp",
+                "--inpaint=false"
+                    ],
+            "justMyCode": false
+        },
+        {
+            "name": "Predict Cells",
+            "type": "python",
+            "request": "launch",
+            "program": "predict_cells.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--base=confs/predict_cells_pc.yaml",
+                "--accelerator=gpu",
+                "--out_folder=D:/HER2/data/cells_gen",
+                "--inpaint=false"
+                    ],
+            "justMyCode": false
+        },
     ]
 }
